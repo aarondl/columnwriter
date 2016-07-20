@@ -10,79 +10,64 @@ var (
 	spaceChar   = []byte{' '}
 )
 
-type bufList [][][]byte
+type bufList []*bytes.Buffer
 
 // Writer wraps another io.Writer and can perform table output.
 type Writer struct {
 	writer io.Writer
 
-	currentLines int
-	maxLines     int
-
-	currentCol int
-	colWidths  []int
-	colLines   bufList
+	bufs   bufList
+	column int
 }
 
 // New constructs a writer.
 func New(w io.Writer) *Writer {
 	return &Writer{
-		writer:    w,
-		colLines:  bufList{nil},
-		colWidths: []int{0},
+		writer: w,
+		bufs:   bufList{&bytes.Buffer{}},
 	}
 }
 
 // NextCol adds a new column, any subsequent writes will be to that column.
 func (w *Writer) NextCol() {
-	w.currentCol++
+	w.column++
 
-	w.currentLines = 0
-
-	w.colWidths = append(w.colWidths, 0)
-	w.colLines = append(w.colLines, nil)
+	w.bufs = append(w.bufs, &bytes.Buffer{})
 }
 
-// Write divides the input into lines based on the '\n' character. It stores
-// the lines in an internal buffer until the .Render() call. Write always
-// writes the lines to the current column, once NextCol is called there is no
-// way to go back to the old column to add new lines.
+// Write to the columns internal buffer
 func (w *Writer) Write(b []byte) (int, error) {
-	// Copy data to not destroy println buffers
-	ln := len(b)
-	hasNewlines := false
-	if bytes.HasSuffix(b, newlineChar) {
-		ln--
-		hasNewlines = true
-	}
-	lineData := make([]byte, ln)
-	copy(lineData, b)
-	lines := bytes.Split(lineData, newlineChar)
-
-	hasNewlines = hasNewlines || len(lines) > 1
-
-	w.currentLines += len(lines)
-	if w.currentLines > w.maxLines {
-		w.maxLines = w.currentLines
-	}
-
-	for _, line := range lines {
-		length := len(line)
-		if length > w.colWidths[w.currentCol] {
-			w.colWidths[w.currentCol] = length
-		}
-	}
-
-	w.colLines[w.currentCol] = append(w.colLines[w.currentCol], lines...)
-
-	return len(b), nil
+	return w.bufs[w.column].Write(b)
 }
 
 // Flush the output to the wrapped io.Writer.
 func (w *Writer) Flush() error {
-	for i := 0; i < w.maxLines; i++ {
-		for j, column := range w.colLines {
-			var ln = w.colWidths[j]
+	colLines := make([][][]byte, w.column+1)
+	colWidths := make([]int, w.column+1)
+	var maxLines int
+
+	for col, b := range w.bufs {
+		splits := bytes.Split(b.Bytes(), newlineChar)
+
+		if len(splits[len(splits)-1]) == 0 {
+			splits = splits[:len(splits)-1]
+		}
+
+		colLines[col] = splits
+		if ln := len(splits); ln > maxLines {
+			maxLines = ln
+		}
+
+		for _, line := range splits {
+			if len(line) > colWidths[col] {
+				colWidths[col] = len(line)
+			}
+		}
+	}
+
+	for i := 0; i < maxLines; i++ {
+		for col, column := range colLines {
+			var ln = colWidths[col]
 			var padding []byte
 
 			if i >= len(column) {

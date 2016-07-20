@@ -17,34 +17,22 @@ func TestBaseCase(t *testing.T) {
 	buf := &bytes.Buffer{}
 
 	writer := New(buf)
-
 	fmt.Fprintln(writer, "a")
-	if err := stateCheck(t, writer, stateChecker{
-		lastColWidth: 0, currentWidth: 1, currentLines: 1, maxLines: 1, currentCol: 0}); err != nil {
-		t.Error(err)
-	}
 	fmt.Fprintln(writer, "there")
-	if err := stateCheck(t, writer, stateChecker{
-		lastColWidth: 0, currentWidth: 5, currentLines: 2, maxLines: 2, currentCol: 0}); err != nil {
-		t.Error(err)
+	if stored := writer.bufs[0].String(); stored != "a\nthere\n" {
+		t.Errorf("wrong stored:\ngot:\n%s\n", spew.Sdump([]byte(stored)))
 	}
 
+	if writer.column != 0 {
+		t.Error("wrong column:", writer.column)
+	}
 	writer.NextCol()
-	if err := stateCheck(t, writer, stateChecker{
-		lastColWidth: 5, currentWidth: 0, currentLines: 0, maxLines: 2, currentCol: 1}); err != nil {
-		t.Error(err)
+	if writer.column != 1 {
+		t.Error("wrong column:", writer.column)
 	}
 
 	fmt.Fprintln(writer, "hello")
-	if err := stateCheck(t, writer, stateChecker{
-		lastColWidth: 5, currentWidth: 5, currentLines: 1, maxLines: 2, currentCol: 1}); err != nil {
-		t.Error(err)
-	}
 	fmt.Fprintln(writer, "hec")
-	if err := stateCheck(t, writer, stateChecker{
-		lastColWidth: 5, currentWidth: 5, currentLines: 2, maxLines: 2, currentCol: 1}); err != nil {
-		t.Error(err)
-	}
 
 	if err := writer.Flush(); err != nil {
 		t.Fatal(err)
@@ -72,89 +60,26 @@ func TestMissingVal(t *testing.T) {
 	compareGoldenFile("missingval.txt", buf.Bytes(), t)
 }
 
-func TestMultipleWriteNoNewline(t *testing.T) {
+func TestNoNewlines(t *testing.T) {
 	buf := &bytes.Buffer{}
 
 	writer := New(buf)
 
 	fmt.Fprint(writer, "a")
-	if err := stateCheck(t, writer, stateChecker{
-		lastColWidth: 0, currentWidth: 1, currentLines: 1, maxLines: 1, currentCol: 0}); err != nil {
-		t.Error(err)
-	}
-
-	fmt.Fprint(writer, " b")
-	if err := stateCheck(t, writer, stateChecker{
-		lastColWidth: 0, currentWidth: 3, currentLines: 1, maxLines: 1, currentCol: 0}); err != nil {
-		t.Error(err)
-	}
-
-	fmt.Fprint(writer, " c")
-	if err := stateCheck(t, writer, stateChecker{
-		lastColWidth: 0, currentWidth: 5, currentLines: 1, maxLines: 1, currentCol: 0}); err != nil {
-		t.Error(err)
-	}
-
-	fmt.Fprintln(writer, " d")
-	if err := stateCheck(t, writer, stateChecker{
-		lastColWidth: 0, currentWidth: 0, currentLines: 2, maxLines: 2, currentCol: 0}); err != nil {
-		t.Error(err)
-	}
-
-	fmt.Fprintln(writer, "there")
-	if err := stateCheck(t, writer, stateChecker{
-		lastColWidth: 0, currentWidth: 5, currentLines: 2, maxLines: 2, currentCol: 0}); err != nil {
-		t.Error(err)
-	}
-
+	fmt.Fprint(writer, "b")
+	fmt.Fprint(writer, "c")
+	fmt.Fprintln(writer, "d")
 	writer.NextCol()
-	if err := stateCheck(t, writer, stateChecker{
-		lastColWidth: 5, currentWidth: 0, currentLines: 0, maxLines: 2, currentCol: 1}); err != nil {
-		t.Error(err)
-	}
-
-	fmt.Fprintln(writer, "hello")
-	if err := stateCheck(t, writer, stateChecker{
-		lastColWidth: 5, currentWidth: 5, currentLines: 1, maxLines: 2, currentCol: 1}); err != nil {
-		t.Error(err)
-	}
-	fmt.Fprintln(writer, "hec")
-	if err := stateCheck(t, writer, stateChecker{
-		lastColWidth: 5, currentWidth: 5, currentLines: 2, maxLines: 2, currentCol: 1}); err != nil {
-		t.Error(err)
-	}
+	fmt.Fprint(writer, "there")
+	fmt.Fprintln(writer, "s")
+	fmt.Fprintln(writer, "b")
 
 	if err := writer.Flush(); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Logf("\n%s", buf.Bytes())
-	compareGoldenFile("nonewline.txt", buf.Bytes(), t)
-}
-
-type stateChecker struct {
-	lastColWidth int
-	currentWidth int
-	currentLines int
-	maxLines     int
-	currentCol   int
-}
-
-func stateCheck(t *testing.T, writer *Writer, state stateChecker) error {
-	if writer.currentCol != state.currentCol {
-		return fmt.Errorf("current col wrong: %v want: %v", writer.currentCol, state.currentCol)
-	}
-	if width := writer.colWidths[len(writer.colWidths)-1]; width != state.currentWidth {
-		return fmt.Errorf("currentWidth wrong: %v want: %v", width, state.currentWidth)
-	}
-	if writer.currentLines != state.currentLines {
-		return fmt.Errorf("currentLines wrong: %v want: %v", writer.currentLines, state.currentLines)
-	}
-	if writer.maxLines != state.maxLines {
-		return fmt.Errorf("maxLines wrong: %v want: %v", writer.maxLines, state.maxLines)
-	}
-
-	return nil
+	compareGoldenFile("nonewlines.txt", buf.Bytes(), t)
 }
 
 func compareGoldenFile(filename string, input []byte, t *testing.T) {
