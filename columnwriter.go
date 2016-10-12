@@ -1,4 +1,4 @@
-package columns
+package columnwriter
 
 import (
 	"bytes"
